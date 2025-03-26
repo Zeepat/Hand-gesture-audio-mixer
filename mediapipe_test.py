@@ -13,6 +13,10 @@ from pyo import *  # Import pyo for real-time audio processing
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Define a modern font setting
+FONT = cv2.FONT_HERSHEY_PLAIN  # More modern, cleaner font
+FONT_SCALE = 0.9  # Adjust scale as needed for the cleaner font
+
 # Initialize MediaPipe Hands and Drawing utilities.
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
@@ -113,6 +117,10 @@ max_speed = 2.0        # Maximum playback speed (2x instead of 3x)
 # For waveform animation
 wave_time_offset = 0
 last_update_time = time.time()
+
+# More modern, cleaner font
+FONT = cv2.FONT_HERSHEY_PLAIN
+FONT_SCALE = 0.9
 
 while cap.isOpened():
     success, frame = cap.read()
@@ -234,8 +242,8 @@ while cap.isOpened():
                     image, 
                     text, 
                     (text_x, text_y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.4,  # Changed from 0.6
+                    FONT,  # Use the new font
+                    FONT_SCALE,  # Use the new scale
                     (255, 255, 255), 
                     1     # Changed from 2
                 )
@@ -260,8 +268,8 @@ while cap.isOpened():
                     image, 
                     text, 
                     (text_x, text_y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.4, 
+                    FONT,  # Use the new font
+                    FONT_SCALE,  # Use the new scale
                     (255, 255, 255), 
                     1
                 )
@@ -484,6 +492,23 @@ while cap.isOpened():
                 pitch_shifter.setMul(volume)
             else:
                 pygame.mixer.music.set_volume(volume)
+            
+            # Add volume indicator above the wave
+            vol_display = int(volume * 10)  # Convert 0.0-1.0 to 0-10 scale
+            
+            # Calculate position - midway between the two hand midpoints
+            mid_x = int((midpoints[0][0] + midpoints[1][0]) / 2)
+            mid_y = int((midpoints[0][1] + midpoints[1][1]) / 2) - 30  # 30 pixels above the midpoint
+            
+            # Create volume text - just the number
+            vol_text = f"{vol_display}"
+            
+            # Get text size for centering
+            text_size = cv2.getTextSize(vol_text, FONT, FONT_SCALE, 1)[0]
+            text_x = mid_x - (text_size[0] // 2)  # Center text horizontally
+            
+            # Display just the volume number without background
+            cv2.putText(image, vol_text, (text_x, mid_y), FONT, FONT_SCALE, (255, 255, 255), 1)
             
             # Remove volume bar and label
             
