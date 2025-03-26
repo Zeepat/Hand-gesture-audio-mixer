@@ -86,6 +86,7 @@ while cap.isOpened():
     
     # Check if hands are detected
     midpoints = []  # Store midpoints for both hands
+    hand_scales = []  # Store distances between index_mcp and pinky_mcp for each hand
     
     if results.multi_hand_landmarks:
         for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
@@ -122,12 +123,44 @@ while cap.isOpened():
             # Draw the midpoint
             cv2.circle(image, midpoint, 10, (255, 165, 0), -1)  # Orange circle for midpoint
             
-            # Store the midpoint for later use
+            # Calculate distance between landmarks 5 and 17 (index MCP and pinky MCP)
+            distance_mcp = math.sqrt(
+                (index_mcp.x - pinky_mcp.x)**2 + 
+                (index_mcp.y - pinky_mcp.y)**2 + 
+                (index_mcp.z - pinky_mcp.z)**2
+            )
+            
+            # Store the midpoint and hand scale for later use
             midpoints.append(midpoint)
+            hand_scales.append(distance_mcp)
         
-        # If we detected two hands, connect their midpoints with a line
+        # If we detected two hands, connect their midpoints with a line and calculate ratio
         if len(midpoints) == 2:
+            # Draw the line between midpoints
             cv2.line(image, midpoints[0], midpoints[1], (0, 0, 255), 3)  # Red line connecting midpoints
+            
+            # Calculate the length of the line between midpoints
+            line_length = math.sqrt(
+                (midpoints[0][0] - midpoints[1][0])**2 + 
+                (midpoints[0][1] - midpoints[1][1])**2
+            )
+            
+            # Calculate average hand scale (average distance between landmarks 5 and 17)
+            avg_hand_scale = (hand_scales[0] + hand_scales[1]) / 2
+            
+            # Calculate the ratio
+            ratio = line_length / (avg_hand_scale * w)  # Multiply by width to normalize
+            
+            # Display the ratio on the screen
+            cv2.putText(
+                image, 
+                f"Distance Ratio: {ratio:.2f}", 
+                (30, 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                1, 
+                (255, 255, 255), 
+                2
+            )
     
     # Display the image
     cv2.imshow('MediaPipe Hands', image)
