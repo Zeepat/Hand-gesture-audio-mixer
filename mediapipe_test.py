@@ -51,86 +51,88 @@ while cap.isOpened():
 
     # Convert the BGR frame to RGB for MediaPipe.
     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    logging.debug("Frame converted from BGR to RGB.")
-
-    # Mark the image as not writeable to improve performance.
-    image.flags.writeable = False
+    
+    # Process the image and find hand landmarks
     results = hands.process(image)
-    logging.debug("Processed frame through MediaPipe Hands.")
-
-    # Prepare image for drawing.
-    image.flags.writeable = True
+    
+    # Convert the image back to BGR for OpenCV display
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-    # Draw hand landmarks if any are detected.
+    
+    # Check if hands are detected
     if results.multi_hand_landmarks:
-        for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-            # Draw the landmarks
+        for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+            # Draw landmarks on the image
             mp_drawing.draw_landmarks(
-                image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                image, 
+                hand_landmarks, 
+                mp_hands.HAND_CONNECTIONS
+            )
             
-            # Get thumb tip and index finger tip coordinates
+            # Get coordinates for thumb tip (landmark 4) and index finger tip (landmark 8)
             thumb_tip = hand_landmarks.landmark[4]
             index_tip = hand_landmarks.landmark[8]
             
-            # Calculate distance between thumb and index finger
-            thumb_x, thumb_y = int(thumb_tip.x * image.shape[1]), int(thumb_tip.y * image.shape[0])
-            index_x, index_y = int(index_tip.x * image.shape[1]), int(index_tip.y * image.shape[0])
+            # Calculate the 3D Euclidean distance between thumb tip and index finger tip
+            distance_thumb_index = math.sqrt(
+                (thumb_tip.x - index_tip.x)**2 + 
+                (thumb_tip.y - index_tip.y)**2 + 
+                (thumb_tip.z - index_tip.z)**2
+            )
             
-            # Draw a line between thumb and index finger
-            cv2.line(image, (thumb_x, thumb_y), (index_x, index_y), (0, 255, 0), 2)
+            # Get coordinates for index MCP (landmark 5) and pinky MCP (landmark 17)
+            index_mcp = hand_landmarks.landmark[5]
+            pinky_mcp = hand_landmarks.landmark[17]
             
-            # Calculate Euclidean distance
-            distance = math.sqrt((thumb_x - index_x)**2 + (thumb_y - index_y)**2)
+            # Calculate the 3D Euclidean distance between index MCP and pinky MCP
+            distance_mcp = math.sqrt(
+                (index_mcp.x - pinky_mcp.x)**2 + 
+                (index_mcp.y - pinky_mcp.y)**2 + 
+                (index_mcp.z - pinky_mcp.z)**2
+            )
             
-            # Determine which hand (assuming max 2 hands)
-            hand_idx = min(idx, 1)
+            # Calculate the ratio (first distance divided by second distance)
+            # Add a small epsilon to avoid division by zero
+            epsilon = 1e-6
+            distance_ratio = distance_thumb_index / (distance_mcp + epsilon)
             
-            if is_calibrating:
-                # During calibration, capture the maximum distance (L shape)
-                max_distances[hand_idx] = max(max_distances[hand_idx], distance)
-                
-                # Display calibration instructions
-                cv2.putText(image, f"CALIBRATING: Make L shape with fingers ({calibration_frames}/{total_calibration_frames})", 
-                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            else:
-                # After calibration, calculate and display percentage
-                if max_distances[hand_idx] > 0:
-                    # Calculate percentage (0% when touching, 100% at max L-shape distance)
-                    percentage = min(100, max(0, int((distance / max_distances[hand_idx]) * 100)))
-                    
-                    # Display the percentage
-                    cv2.putText(image, f"Hand {hand_idx+1}: {percentage}%", 
-                                (thumb_x, thumb_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                    
-                    logging.debug(f"Hand {hand_idx+1} - Distance: {distance:.2f}, Percentage: {percentage}%")
-        
-        logging.debug("Hand landmarks drawn on frame.")
-    else:
-        logging.debug("No hand landmarks detected.")
-        
-    # Handle calibration timing
-    if is_calibrating:
-        calibration_frames += 1
-        if calibration_frames >= total_calibration_frames:
-            is_calibrating = False
-            logging.info(f"Calibration complete. Max distances: {max_distances}")
-
-    # Display the output.
-    cv2.imshow('MediaPipe Hands', image)
-    logging.debug("Frame displayed.")
-
-    # Exit when 'q' is pressed.
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        logging.info("Exit key pressed. Quitting.")
-        break
+            # Scale ratio for display (optional)
+            scaled_ratio = distance_ratio * 100  # Scale by 100 for better readability
+            
+            # Display both distances and the ratio on the frame
+            cv2.putText(
+                image, 
+                f"Thumb-Index: {distance_thumb_index:.2f}", 
+                (50, 50 + hand_idx * 90), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.8, 
+                (0, 255, 0), 
+                2
+            )
+            cv2.putText(
+                image, 
+                f"MCP Distance: {distance_mcp:.2f}", 
+                (50, 80 + hand_idx * 90), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.8, 
+                (0, 255, 0), 
+                2
+            )
+            cv2.putText(
+                image, 
+                f"Ratio: {scaled_ratio:.2f}", 
+                (50, 110 + hand_idx * 90), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.8, 
+                (255, 0, 0), 
+                2
+            )
     
-    # Reset calibration when 'c' is pressed
-    if cv2.waitKey(1) & 0xFF == ord('c'):
-        is_calibrating = True
-        max_distances = [0, 0]
-        calibration_frames = 0
-        logging.info("Recalibrating...")
+    # Display the image with the landmarks and distance information
+    cv2.imshow('MediaPipe Hands', image)
+    
+    # Break the loop when 'q' is pressed
+    if cv2.waitKey(5) & 0xFF == ord('q'):
+        break
 
 logging.info("Releasing webcam and closing windows.")
 cap.release()
