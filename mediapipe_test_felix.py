@@ -274,37 +274,7 @@ while cap.isOpened():
             except Exception as e:
                 logging.error(f"Error setting pitch: {e}")
             
-            # Display pitch effect
-            cv2.putText(
-                image, 
-                f"Pitch: {pitch_effect_text} ({int(pitch_effect * 100)}%)", 
-                (30, 150), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.7, 
-                (0, 165, 255), 
-                2
-            )
-            
-            # Show semitone shift
-            cv2.putText(
-                image, 
-                f"Semitones: +{semitones:.1f}", 
-                (30, 180), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.7, 
-                (0, 165, 255), 
-                2
-            )
-            
-            # Draw a pitch effect bar
-            bar_x, bar_y = 30, 210
-            bar_width = 300
-            bar_height = 20
-            # Background bar
-            cv2.rectangle(image, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (0, 0, 255), 2)
-            # Filled part based on pitch effect
-            filled_width = int(pitch_effect * bar_width)
-            cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (0, 165, 255), -1)
+            # Remove on-screen text and bars for pitch control
         
         # If left hand is detected, control the playback speed
         if left_hand_index is not None:
@@ -361,38 +331,7 @@ while cap.isOpened():
             except Exception as e:
                 logging.error(f"Error setting speed: {e}")
             
-            # Display speed effect and pitch compensation
-            cv2.putText(
-                image, 
-                f"Speed: {speed_effect_text} ({speed_multiplier:.2f}x)", 
-                (30, 250), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.7, 
-                (255, 0, 0), 
-                2
-            )
-            
-            # Show pitch compensation
-            if using_pyo:
-                cv2.putText(
-                    image, 
-                    f"Pitch Comp: {pitch_compensation:.1f} semitones", 
-                    (30, 320), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.7, 
-                    (255, 0, 0), 
-                    2
-                )
-            
-            # Draw a speed effect bar
-            bar_x, bar_y = 30, 280
-            bar_width = 300
-            bar_height = 20
-            # Background bar
-            cv2.rectangle(image, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (0, 0, 255), 2)
-            # Filled part based on speed effect
-            filled_width = int(speed_effect * bar_width)
-            cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (255, 0, 0), -1)
+            # Remove on-screen text and bars for speed control
         
         # If we detected two hands, control volume with the distance between hands
         if len(midpoints) == 2:
@@ -429,36 +368,9 @@ while cap.isOpened():
             else:
                 pygame.mixer.music.set_volume(volume)
             
-            # Draw a volume bar at the bottom of the screen
-            bar_x, bar_y = w - 330, h - 50
-            bar_width = 300
-            bar_height = 20
-            # Draw background bar (empty volume)
-            cv2.rectangle(image, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (0, 0, 255), 2)
-            # Draw filled volume
-            filled_width = int(volume * bar_width)
-            cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (0, 255, 0), -1)
-            # Add volume label
-            cv2.putText(
-                image, 
-                f"Volume: {int(volume * 100)}%", 
-                (bar_x, bar_y - 10), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.6, 
-                (255, 255, 255), 
-                2
-            )
+            # Remove volume bar and label
             
-            # Display individual pinch ratios in a combined format
-            cv2.putText(
-                image, 
-                f"L Pinch: {pinch_ratios[0]:.2f} | R Pinch: {pinch_ratios[1]:.2f}", 
-                (30, 110), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.7, 
-                (255, 165, 0), 
-                2
-            )
+            # Remove pinch ratio display
     
     # Display the image
     cv2.imshow('MediaPipe Hands', image)
