@@ -494,14 +494,15 @@ while cap.isOpened():
                 pygame.mixer.music.set_volume(volume)
             
             # Add volume indicator above the wave
-            vol_display = int(volume * 10)  # Convert 0.0-1.0 to 0-10 scale
+            # Show volume as a float with one decimal place (0.0-10.0)
+            vol_display = volume * 10  # Convert 0.0-1.0 to 0.0-10.0
             
             # Calculate position - midway between the two hand midpoints
             mid_x = int((midpoints[0][0] + midpoints[1][0]) / 2)
             mid_y = int((midpoints[0][1] + midpoints[1][1]) / 2) - 30  # 30 pixels above the midpoint
             
-            # Create volume text - just the number
-            vol_text = f"{vol_display}"
+            # Create volume text with one decimal point (e.g., 2.3 or 5.7)
+            vol_text = f"{vol_display:.1f}"
             
             # Get text size for centering
             text_size = cv2.getTextSize(vol_text, FONT, FONT_SCALE, 1)[0]
