@@ -104,7 +104,7 @@ total_calibration_frames = 30
 min_pinch_ratio = 0.5  # Pinch ratio at 0% effect
 max_pinch_ratio = 2.5  # Pinch ratio at 100% effect
 max_semitones = 12     # Maximum pitch shift (1 octave)
-max_speed = 3.0        # Maximum playback speed (3x)
+max_speed = 2.0        # Maximum playback speed (2x instead of 3x)
 
 while cap.isOpened():
     success, frame = cap.read()
@@ -289,13 +289,13 @@ while cap.isOpened():
                 speed_multiplier = 1.0
                 speed_effect_text = "Normal Speed"
             elif pinch_ratio >= max_pinch_ratio:
-                speed_effect = 1.0  # Maximum speed (3x)
+                speed_effect = 1.0  # Maximum speed (2x)
                 speed_multiplier = max_speed
                 speed_effect_text = "Maximum Speed"
             else:
                 # Linear mapping from [0.5, 2.5] to [0, 1]
                 speed_effect = (pinch_ratio - min_pinch_ratio) / (max_pinch_ratio - min_pinch_ratio)
-                # Map to speed range [1.0, 3.0]
+                # Map to speed range [1.0, 2.0]
                 speed_multiplier = 1.0 + (speed_effect * (max_speed - 1.0))
                 
                 # Set descriptive text based on effect level
@@ -311,8 +311,22 @@ while cap.isOpened():
             try:
                 # Apply speed change based on the audio backend
                 if using_pyo and current_sound is not None:
-                    # For pyo, adjust the frequency
+                    # For pyo, adjust the speed without changing pitch
                     current_sound.setSpeed(speed_multiplier)
+                    
+                    # Calculate pitch compensation to prevent "chipmunk effect"
+                    # When speed increases, we need to lower the pitch proportionally
+                    # 2x speed needs -12 semitones (one octave down) compensation
+                    pitch_compensation = -12 * (speed_multiplier - 1)
+                    
+                    # Apply the combined pitch effect (user's pitch control + speed compensation)
+                    if right_hand_index is not None:
+                        # If right hand is active, add the compensation to the user's desired pitch
+                        user_pitch = pitch_effect * max_semitones
+                        pitch_shifter.setTranspo(user_pitch + pitch_compensation)
+                    else:
+                        # If only speed is being controlled, just apply the compensation
+                        pitch_shifter.setTranspo(pitch_compensation)
                 else:
                     # For pygame, we would need to reload the file with different settings
                     # This is a limitation of pygame - real-time speed change isn't easily supported
@@ -320,7 +334,7 @@ while cap.isOpened():
             except Exception as e:
                 logging.error(f"Error setting speed: {e}")
             
-            # Display speed effect
+            # Display speed effect and pitch compensation
             cv2.putText(
                 image, 
                 f"Speed: {speed_effect_text} ({speed_multiplier:.2f}x)", 
@@ -330,6 +344,18 @@ while cap.isOpened():
                 (255, 0, 0), 
                 2
             )
+            
+            # Show pitch compensation
+            if using_pyo:
+                cv2.putText(
+                    image, 
+                    f"Pitch Comp: {pitch_compensation:.1f} semitones", 
+                    (30, 320), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 
+                    0.7, 
+                    (255, 0, 0), 
+                    2
+                )
             
             # Draw a speed effect bar
             bar_x, bar_y = 30, 280
