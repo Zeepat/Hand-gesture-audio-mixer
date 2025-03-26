@@ -4,6 +4,9 @@ import logging
 import time
 import numpy as np
 import math
+import pygame
+import os
+from pathlib import Path
 
 # Set up logging configuration.
 logging.basicConfig(level=logging.DEBUG,
@@ -12,6 +15,29 @@ logging.basicConfig(level=logging.DEBUG,
 # Initialize MediaPipe Hands and Drawing utilities.
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
+
+# Initialize pygame for audio playback
+pygame.init()
+pygame.mixer.init()
+
+# Find songs in the "Songs" folder
+songs_folder = Path("Songs")
+if not songs_folder.exists():
+    logging.warning(f"Songs folder not found at {songs_folder.absolute()}")
+    songs = []
+else:
+    # Get all audio files (assuming common audio formats)
+    songs = list(songs_folder.glob("*.mp3")) + list(songs_folder.glob("*.wav")) + list(songs_folder.glob("*.ogg"))
+    
+    if songs:
+        logging.info(f"Found {len(songs)} songs. Playing: {songs[0].name}")
+        pygame.mixer.music.load(str(songs[0]))
+        # Set the volume to 50%
+        pygame.mixer.music.set_volume(0.5)
+        logging.info("Setting initial volume to 50%")
+        pygame.mixer.music.play()
+    else:
+        logging.warning("No songs found in the Songs folder")
 
 logging.info("Initializing MediaPipe Hands model.")
 hands = mp_hands.Hands(
@@ -113,3 +139,7 @@ while cap.isOpened():
 logging.info("Releasing webcam and closing windows.")
 cap.release()
 cv2.destroyAllWindows()
+
+# Stop music playback
+pygame.mixer.music.stop()
+pygame.quit()
