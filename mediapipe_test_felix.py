@@ -151,14 +151,9 @@ while cap.isOpened():
             index_mcp_px = (int(index_mcp.x * w), int(index_mcp.y * h))
             pinky_mcp_px = (int(pinky_mcp.x * w), int(pinky_mcp.y * h))
             
-            # Draw only the specified landmarks
+            # Draw only thumb tip and index tip landmarks (removing knuckles)
             cv2.circle(image, thumb_tip_px, 8, (0, 0, 255), -1)  # Red for thumb tip
             cv2.circle(image, index_tip_px, 8, (0, 255, 0), -1)  # Green for index tip
-            cv2.circle(image, index_mcp_px, 8, (255, 0, 0), -1)  # Blue for index MCP
-            cv2.circle(image, pinky_mcp_px, 8, (255, 0, 255), -1)  # Purple for pinky MCP
-            
-            # Draw a line between index MCP and pinky MCP (landmarks 5 and 17)
-            cv2.line(image, index_mcp_px, pinky_mcp_px, (255, 255, 0), 2)
             
             # Draw a line between thumb tip and index tip (landmarks 4 and 8)
             cv2.line(image, thumb_tip_px, index_tip_px, (0, 255, 255), 2)
@@ -193,16 +188,48 @@ while cap.isOpened():
             hand_scales.append(distance_mcp)
             pinch_ratios.append(pinch_ratio)
             
-            # Display pinch ratio for each hand
-            cv2.putText(
-                image, 
-                f"{handedness} Hand: {pinch_ratio:.2f}", 
-                (thumb_tip_px[0] - 50, thumb_tip_px[1] - 10), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.6, 
-                (0, 255, 255), 
-                2
-            )
+            # Display function of each hand instead of raw pinch ratio
+            if handedness == "Left":  # Right hand in mirrored image
+                speed_info = "Normal Speed"
+                if pinch_ratio > min_pinch_ratio:
+                    if pinch_ratio >= max_pinch_ratio:
+                        speed_multiplier = max_speed
+                        speed_info = f"Max Speed ({max_speed:.1f}x)"
+                    else:
+                        speed_effect = (pinch_ratio - min_pinch_ratio) / (max_pinch_ratio - min_pinch_ratio)
+                        speed_multiplier = 1.0 + (speed_effect * (max_speed - 1.0))
+                        speed_info = f"{speed_multiplier:.1f}x"
+                
+                cv2.putText(
+                    image, 
+                    f"Speedup: {speed_info}", 
+                    (thumb_tip_px[0] - 50, thumb_tip_px[1] - 10), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 
+                    0.6, 
+                    (255, 0, 0), 
+                    2
+                )
+            
+            elif handedness == "Right":  # Left hand in mirrored image
+                pitch_info = "Normal Pitch"
+                if pinch_ratio > min_pinch_ratio:
+                    if pinch_ratio >= max_pinch_ratio:
+                        semitones = max_semitones
+                        pitch_info = f"+{semitones:.0f} semitones"
+                    else:
+                        pitch_effect = (pinch_ratio - min_pinch_ratio) / (max_pinch_ratio - min_pinch_ratio)
+                        semitones = pitch_effect * max_semitones
+                        pitch_info = f"+{semitones:.1f} semitones"
+                
+                cv2.putText(
+                    image, 
+                    f"Pitch: {pitch_info}", 
+                    (thumb_tip_px[0] - 50, thumb_tip_px[1] - 10), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 
+                    0.6, 
+                    (0, 165, 255), 
+                    2
+                )
         
         # Process right hand for pitch control (even if it's the only hand)
         right_hand_index = None
@@ -402,19 +429,8 @@ while cap.isOpened():
             else:
                 pygame.mixer.music.set_volume(volume)
             
-            # Display the ratio and volume on the screen
-            cv2.putText(
-                image, 
-                f"Ratio: {ratio:.2f} | Volume: {int(volume * 100)}%", 
-                (30, 30), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                1, 
-                (255, 255, 255), 
-                2
-            )
-            
-            # Draw a volume bar
-            bar_x, bar_y = 30, 70
+            # Draw a volume bar at the bottom of the screen
+            bar_x, bar_y = w - 330, h - 50
             bar_width = 300
             bar_height = 20
             # Draw background bar (empty volume)
@@ -422,6 +438,16 @@ while cap.isOpened():
             # Draw filled volume
             filled_width = int(volume * bar_width)
             cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (0, 255, 0), -1)
+            # Add volume label
+            cv2.putText(
+                image, 
+                f"Volume: {int(volume * 100)}%", 
+                (bar_x, bar_y - 10), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.6, 
+                (255, 255, 255), 
+                2
+            )
             
             # Display individual pinch ratios in a combined format
             cv2.putText(
