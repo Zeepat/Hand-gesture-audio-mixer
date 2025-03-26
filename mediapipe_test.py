@@ -87,6 +87,7 @@ while cap.isOpened():
     # Check if hands are detected
     midpoints = []  # Store midpoints for both hands
     hand_scales = []  # Store distances between index_mcp and pinky_mcp for each hand
+    pinch_ratios = []  # Store thumb-index pinch ratios for each hand
     
     if results.multi_hand_landmarks:
         for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
@@ -130,9 +131,32 @@ while cap.isOpened():
                 (index_mcp.z - pinky_mcp.z)**2
             )
             
-            # Store the midpoint and hand scale for later use
+            # Calculate distance between thumb tip and index tip (pinch gesture)
+            pinch_distance = math.sqrt(
+                (thumb_tip.x - index_tip.x)**2 + 
+                (thumb_tip.y - index_tip.y)**2 + 
+                (thumb_tip.z - index_tip.z)**2
+            )
+            
+            # Calculate pinch ratio (normalized by hand size)
+            pinch_ratio = pinch_distance / distance_mcp if distance_mcp > 0 else 0
+            
+            # Store the midpoint, hand scale, and pinch ratio for later use
             midpoints.append(midpoint)
             hand_scales.append(distance_mcp)
+            pinch_ratios.append(pinch_ratio)
+            
+            # Display pinch ratio for each hand
+            hand_label = f"Hand {hand_idx+1}"
+            cv2.putText(
+                image, 
+                f"{hand_label} Pinch: {pinch_ratio:.2f}", 
+                (thumb_tip_px[0] - 50, thumb_tip_px[1] - 10), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.6, 
+                (0, 255, 255), 
+                2
+            )
         
         # If we detected two hands, connect their midpoints with a line and calculate ratio
         if len(midpoints) == 2:
@@ -185,6 +209,17 @@ while cap.isOpened():
             # Draw filled volume
             filled_width = int(volume * bar_width)
             cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (0, 255, 0), -1)
+            
+            # Display individual pinch ratios in a combined format
+            cv2.putText(
+                image, 
+                f"L Pinch: {pinch_ratios[0]:.2f} | R Pinch: {pinch_ratios[1]:.2f}", 
+                (30, 110), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (255, 165, 0), 
+                2
+            )
     
     # Display the image
     cv2.imshow('MediaPipe Hands', image)
