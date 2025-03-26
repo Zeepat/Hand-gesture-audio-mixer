@@ -104,6 +104,7 @@ total_calibration_frames = 30
 min_pinch_ratio = 0.5  # Pinch ratio at 0% effect
 max_pinch_ratio = 2.5  # Pinch ratio at 100% effect
 max_semitones = 12     # Maximum pitch shift (1 octave)
+max_speed = 3.0        # Maximum playback speed (3x)
 
 while cap.isOpened():
     success, frame = cap.read()
@@ -205,10 +206,12 @@ while cap.isOpened():
         
         # Process right hand for pitch control (even if it's the only hand)
         right_hand_index = None
+        left_hand_index = None
         for i, label in enumerate(hand_labels):
             if label == "Right":  # This is left hand in mirrored image
                 right_hand_index = i
-                break
+            elif label == "Left":  # This is right hand in mirrored image
+                left_hand_index = i
         
         # If right hand is detected and we're using pyo, control the pitch
         if right_hand_index is not None and using_pyo and pitch_shifter is not None:
@@ -275,6 +278,68 @@ while cap.isOpened():
             # Filled part based on pitch effect
             filled_width = int(pitch_effect * bar_width)
             cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (0, 165, 255), -1)
+        
+        # If left hand is detected, control the playback speed
+        if left_hand_index is not None:
+            pinch_ratio = pinch_ratios[left_hand_index]
+            
+            # Map pinch ratio to speed control (0.5 to 2.5 range)
+            if pinch_ratio <= min_pinch_ratio:
+                speed_effect = 0.0  # Normal speed (1x)
+                speed_multiplier = 1.0
+                speed_effect_text = "Normal Speed"
+            elif pinch_ratio >= max_pinch_ratio:
+                speed_effect = 1.0  # Maximum speed (3x)
+                speed_multiplier = max_speed
+                speed_effect_text = "Maximum Speed"
+            else:
+                # Linear mapping from [0.5, 2.5] to [0, 1]
+                speed_effect = (pinch_ratio - min_pinch_ratio) / (max_pinch_ratio - min_pinch_ratio)
+                # Map to speed range [1.0, 3.0]
+                speed_multiplier = 1.0 + (speed_effect * (max_speed - 1.0))
+                
+                # Set descriptive text based on effect level
+                if speed_effect < 0.25:
+                    speed_effect_text = "Slight Speed Up"
+                elif speed_effect < 0.5:
+                    speed_effect_text = "Medium Speed"
+                elif speed_effect < 0.75:
+                    speed_effect_text = "Fast"
+                else:
+                    speed_effect_text = "Very Fast"
+            
+            try:
+                # Apply speed change based on the audio backend
+                if using_pyo and current_sound is not None:
+                    # For pyo, adjust the frequency
+                    current_sound.setSpeed(speed_multiplier)
+                else:
+                    # For pygame, we would need to reload the file with different settings
+                    # This is a limitation of pygame - real-time speed change isn't easily supported
+                    pass
+            except Exception as e:
+                logging.error(f"Error setting speed: {e}")
+            
+            # Display speed effect
+            cv2.putText(
+                image, 
+                f"Speed: {speed_effect_text} ({speed_multiplier:.2f}x)", 
+                (30, 250), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                0.7, 
+                (255, 0, 0), 
+                2
+            )
+            
+            # Draw a speed effect bar
+            bar_x, bar_y = 30, 280
+            bar_width = 300
+            bar_height = 20
+            # Background bar
+            cv2.rectangle(image, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (0, 0, 255), 2)
+            # Filled part based on speed effect
+            filled_width = int(speed_effect * bar_width)
+            cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (255, 0, 0), -1)
         
         # If we detected two hands, control volume with the distance between hands
         if len(midpoints) == 2:
