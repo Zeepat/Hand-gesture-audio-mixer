@@ -90,12 +90,13 @@ hands = mp_hands.Hands(
 logging.info("Opening webcam...")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
-time.sleep(2)  # Give the webcam time to initialize.
-
 if not cap.isOpened():
     logging.error("Cannot open webcam!")
     exit(1)
 logging.info("Webcam opened successfully.")
+
+cv2.namedWindow('MediaPipe Hands', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('MediaPipe Hands', 960, 720)  # Adjust dimensions as needed
 
 # Calibration variables
 is_calibrating = True

@@ -90,12 +90,13 @@ hands = mp_hands.Hands(
 logging.info("Opening webcam...")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
-time.sleep(2)  # Give the webcam time to initialize.
-
 if not cap.isOpened():
     logging.error("Cannot open webcam!")
     exit(1)
 logging.info("Webcam opened successfully.")
+
+cv2.namedWindow('MediaPipe Hands', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('MediaPipe Hands', 960, 720)  # Adjust dimensions as needed
 
 # Calibration variables
 is_calibrating = True
@@ -159,6 +160,8 @@ while cap.isOpened():
             index_tip = hand_landmarks.landmark[8]
             index_mcp = hand_landmarks.landmark[5]
             pinky_mcp = hand_landmarks.landmark[17]
+            wrist = hand_landmarks.landmark[0]
+            middle_mcp = hand_landmarks.landmark[9]  # Middle finger MCP joint
             
             # Convert normalized coordinates to pixel coordinates
             h, w, c = image.shape
@@ -166,6 +169,11 @@ while cap.isOpened():
             index_tip_px = (int(index_tip.x * w), int(index_tip.y * h))
             index_mcp_px = (int(index_mcp.x * w), int(index_mcp.y * h))
             pinky_mcp_px = (int(pinky_mcp.x * w), int(pinky_mcp.y * h))
+            
+            # Calculate palm center (between wrist and middle finger MCP)
+            palm_center_x = int((wrist.x + middle_mcp.x) * w / 2)
+            palm_center_y = int((wrist.y + middle_mcp.y) * h / 2)
+            palm_center = (palm_center_x, palm_center_y)
             
             # Draw only thumb tip and index tip landmarks (removing knuckles)
             cv2.circle(image, thumb_tip_px, 2, (255, 255, 255), -1)  # Red for thumb tip
@@ -180,7 +188,7 @@ while cap.isOpened():
             midpoint = (midpoint_x, midpoint_y)
             
             # Draw the midpoint
-            cv2.circle(image, midpoint, 0, (255, 255, 255), -1)  # Orange circle for midpoint
+            cv2.circle(image, midpoint, 10, (255, 165, 0), -1)  # Orange circle for midpoint
             
             # Calculate distance between landmarks 5 and 17 (index MCP and pinky MCP)
             distance_mcp = math.sqrt(
@@ -216,10 +224,16 @@ while cap.isOpened():
                         speed_multiplier = 1.0 + (speed_effect * (max_speed - 1.0))
                         speed_info = f"{speed_multiplier:.1f}x"
                 
+                # Right-align text for left hand (text ends at palm center)
+                text = f"Speedup: {speed_info}"
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                text_x = palm_center[0] - text_size[0]  # Right-aligned
+                text_y = palm_center[1]
+                
                 cv2.putText(
                     image, 
-                    f"Speedup: {speed_info}", 
-                    (thumb_tip_px[0] - 50, thumb_tip_px[1] - 10), 
+                    text, 
+                    (text_x, text_y), 
                     cv2.FONT_HERSHEY_SIMPLEX, 
                     0.6, 
                     (255, 0, 0), 
@@ -237,10 +251,15 @@ while cap.isOpened():
                         semitones = pitch_effect * max_semitones
                         pitch_info = f"+{semitones:.1f} semitones"
                 
+                # Left-align text for right hand (text starts at palm center)
+                text = f"Pitch: {pitch_info}"
+                text_x = palm_center[0]  # Left-aligned
+                text_y = palm_center[1]
+                
                 cv2.putText(
                     image, 
-                    f"Pitch: {pitch_info}", 
-                    (thumb_tip_px[0] - 50, thumb_tip_px[1] - 10), 
+                    text, 
+                    (text_x, text_y), 
                     cv2.FONT_HERSHEY_SIMPLEX, 
                     0.6, 
                     (0, 165, 255), 
