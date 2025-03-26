@@ -188,7 +188,7 @@ while cap.isOpened():
             midpoint = (midpoint_x, midpoint_y)
             
             # Draw the midpoint
-            cv2.circle(image, midpoint, 10, (255, 165, 0), -1)  # Orange circle for midpoint
+            cv2.circle(image, midpoint, 0, (255, 165, 0), -1)  # Orange circle for midpoint
             
             # Calculate distance between landmarks 5 and 17 (index MCP and pinky MCP)
             distance_mcp = math.sqrt(
@@ -226,7 +226,7 @@ while cap.isOpened():
                 
                 # Right-align text for left hand (text ends at palm center)
                 text = f"Speedup: {speed_info}"
-                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.3, 1)[0]  # Changed from 0.6, 2
                 text_x = palm_center[0] - text_size[0]  # Right-aligned
                 text_y = palm_center[1]
                 
@@ -235,9 +235,9 @@ while cap.isOpened():
                     text, 
                     (text_x, text_y), 
                     cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.6, 
-                    (255, 0, 0), 
-                    2
+                    0.4,  # Changed from 0.6
+                    (255, 255, 255), 
+                    1     # Changed from 2
                 )
             
             elif handedness == "Right":  # Left hand in mirrored image
@@ -261,9 +261,9 @@ while cap.isOpened():
                     text, 
                     (text_x, text_y), 
                     cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.6, 
-                    (0, 165, 255), 
-                    2
+                    0.4, 
+                    (255, 255, 255), 
+                    1
                 )
         
         # Process right hand for pitch control (even if it's the only hand)
