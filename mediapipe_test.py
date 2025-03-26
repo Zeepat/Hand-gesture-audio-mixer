@@ -55,79 +55,55 @@ while cap.isOpened():
     # Process the image and find hand landmarks
     results = hands.process(image)
     
-    # Convert the image back to BGR for OpenCV display
+    # Convert back to BGR for display
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     
     # Check if hands are detected
+    midpoints = []  # Store midpoints for both hands
+    
     if results.multi_hand_landmarks:
         for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-            # Draw landmarks on the image
-            mp_drawing.draw_landmarks(
-                image, 
-                hand_landmarks, 
-                mp_hands.HAND_CONNECTIONS
-            )
-            
-            # Get coordinates for thumb tip (landmark 4) and index finger tip (landmark 8)
+            # Get the specific landmarks we want to show
             thumb_tip = hand_landmarks.landmark[4]
             index_tip = hand_landmarks.landmark[8]
-            
-            # Calculate the 3D Euclidean distance between thumb tip and index finger tip
-            distance_thumb_index = math.sqrt(
-                (thumb_tip.x - index_tip.x)**2 + 
-                (thumb_tip.y - index_tip.y)**2 + 
-                (thumb_tip.z - index_tip.z)**2
-            )
-            
-            # Get coordinates for index MCP (landmark 5) and pinky MCP (landmark 17)
             index_mcp = hand_landmarks.landmark[5]
             pinky_mcp = hand_landmarks.landmark[17]
             
-            # Calculate the 3D Euclidean distance between index MCP and pinky MCP
-            distance_mcp = math.sqrt(
-                (index_mcp.x - pinky_mcp.x)**2 + 
-                (index_mcp.y - pinky_mcp.y)**2 + 
-                (index_mcp.z - pinky_mcp.z)**2
-            )
+            # Convert normalized coordinates to pixel coordinates
+            h, w, c = image.shape
+            thumb_tip_px = (int(thumb_tip.x * w), int(thumb_tip.y * h))
+            index_tip_px = (int(index_tip.x * w), int(index_tip.y * h))
+            index_mcp_px = (int(index_mcp.x * w), int(index_mcp.y * h))
+            pinky_mcp_px = (int(pinky_mcp.x * w), int(pinky_mcp.y * h))
             
-            # Calculate the ratio (first distance divided by second distance)
-            # Add a small epsilon to avoid division by zero
-            epsilon = 1e-6
-            distance_ratio = distance_thumb_index / (distance_mcp + epsilon)
+            # Draw only the specified landmarks
+            cv2.circle(image, thumb_tip_px, 8, (0, 0, 255), -1)  # Red for thumb tip
+            cv2.circle(image, index_tip_px, 8, (0, 255, 0), -1)  # Green for index tip
+            cv2.circle(image, index_mcp_px, 8, (255, 0, 0), -1)  # Blue for index MCP
+            cv2.circle(image, pinky_mcp_px, 8, (255, 0, 255), -1)  # Purple for pinky MCP
             
-            # Scale ratio for display (optional)
-            scaled_ratio = distance_ratio * 100  # Scale by 100 for better readability
+            # Draw a line between index MCP and pinky MCP (landmarks 5 and 17)
+            cv2.line(image, index_mcp_px, pinky_mcp_px, (255, 255, 0), 2)
             
-            # Display both distances and the ratio on the frame
-            cv2.putText(
-                image, 
-                f"Thumb-Index: {distance_thumb_index:.2f}", 
-                (50, 50 + hand_idx * 90), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.8, 
-                (0, 255, 0), 
-                2
-            )
-            cv2.putText(
-                image, 
-                f"MCP Distance: {distance_mcp:.2f}", 
-                (50, 80 + hand_idx * 90), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.8, 
-                (0, 255, 0), 
-                2
-            )
-            cv2.putText(
-                image, 
-                f"Ratio: {scaled_ratio:.2f}", 
-                (50, 110 + hand_idx * 90), 
-                cv2.FONT_HERSHEY_SIMPLEX, 
-                0.8, 
-                (255, 0, 0), 
-                2
-            )
+            # Draw a line between thumb tip and index tip (landmarks 4 and 8)
+            cv2.line(image, thumb_tip_px, index_tip_px, (0, 255, 255), 2)
+            
+            # Calculate midpoint between keypoints 4 and 8
+            midpoint_x = int((thumb_tip.x + index_tip.x) * w / 2)
+            midpoint_y = int((thumb_tip.y + index_tip.y) * h / 2)
+            midpoint = (midpoint_x, midpoint_y)
+            
+            # Draw the midpoint
+            cv2.circle(image, midpoint, 10, (255, 165, 0), -1)  # Orange circle for midpoint
+            
+            # Store the midpoint for later use
+            midpoints.append(midpoint)
+        
+        # If we detected two hands, connect their midpoints with a line
+        if len(midpoints) == 2:
+            cv2.line(image, midpoints[0], midpoints[1], (0, 0, 255), 3)  # Red line connecting midpoints
     
-    # Display the image with the landmarks and distance information
+    # Display the image
     cv2.imshow('MediaPipe Hands', image)
     
     # Break the loop when 'q' is pressed
