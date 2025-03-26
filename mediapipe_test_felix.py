@@ -168,11 +168,11 @@ while cap.isOpened():
             pinky_mcp_px = (int(pinky_mcp.x * w), int(pinky_mcp.y * h))
             
             # Draw only thumb tip and index tip landmarks (removing knuckles)
-            cv2.circle(image, thumb_tip_px, 8, (0, 0, 255), -1)  # Red for thumb tip
-            cv2.circle(image, index_tip_px, 8, (0, 255, 0), -1)  # Green for index tip
+            cv2.circle(image, thumb_tip_px, 2, (255, 255, 255), -1)  # Red for thumb tip
+            cv2.circle(image, index_tip_px, 2, (255, 255, 255), -1)  # Green for index tip
             
             # Draw a line between thumb tip and index tip (landmarks 4 and 8)
-            cv2.line(image, thumb_tip_px, index_tip_px, (0, 255, 255), 2)
+            cv2.line(image, thumb_tip_px, index_tip_px, (255, 255, 255), 1)
             
             # Calculate midpoint between keypoints 4 and 8
             midpoint_x = int((thumb_tip.x + index_tip.x) * w / 2)
