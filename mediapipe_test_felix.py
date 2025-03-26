@@ -46,6 +46,9 @@ try:
                 # Create a pitch shifter effect
                 pitch_shifter = Harmonizer(current_sound, transpo=0)  # Start with normal pitch
                 
+                # Create an analyzer for waveform visualization
+                analyzer = Follower(pitch_shifter)
+                
                 # Connect to output and start playback
                 pitch_shifter.out()
                 logging.info("Audio playback started with real-time pitch control.")
@@ -106,6 +109,10 @@ max_pinch_ratio = 2.5  # Pinch ratio at 100% effect
 max_semitones = 12     # Maximum pitch shift (1 octave)
 max_speed = 2.0        # Maximum playback speed (2x instead of 3x)
 
+# For waveform animation
+wave_time_offset = 0
+last_update_time = time.time()
+
 while cap.isOpened():
     success, frame = cap.read()
     if not success:
@@ -125,6 +132,15 @@ while cap.isOpened():
     
     # Convert back to BGR for display
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    
+    # Update wave animation time
+    current_time = time.time()
+    time_delta = current_time - last_update_time
+    wave_time_offset += time_delta * 5  # Controls animation speed
+    last_update_time = current_time
+    
+    # Initialize volume with a default value
+    volume = 0.5  # Default to medium volume
     
     # Check if hands are detected
     midpoints = []  # Store midpoints for both hands
@@ -335,9 +351,91 @@ while cap.isOpened():
         
         # If we detected two hands, control volume with the distance between hands
         if len(midpoints) == 2:
-            # Draw the line between midpoints
-            cv2.line(image, midpoints[0], midpoints[1], (0, 0, 255), 3)  # Red line connecting midpoints
+            # Don't draw the simple red line - replace with waveform visualization
+            # Calculate line parameters between hands
+            start_point = midpoints[0]
+            end_point = midpoints[1]
             
+            # Calculate vector between hands
+            vec_x = end_point[0] - start_point[0]
+            vec_y = end_point[1] - start_point[1]
+            distance = math.sqrt(vec_x**2 + vec_y**2)
+            
+            # Calculate perpendicular unit vector for wave amplitude direction
+            if distance > 0:
+                unit_x = vec_x / distance
+                unit_y = vec_y / distance
+                perp_x = -unit_y  # Perpendicular vector
+                perp_y = unit_x
+                
+                # Create a wave pattern based on time and position
+                num_points = 150  # Number of points in the wave
+                points = []
+                
+                # Make amplitude depend on volume for visual feedback
+                base_amplitude = 15 + volume * 45  # 15-60 pixel range based on volume
+                
+                # Get audio energy level if using pyo
+                audio_energy = 1.0
+                if using_pyo and 'analyzer' in locals():
+                    try:
+                        audio_energy = analyzer.get() * 5  # Scale factor
+                    except:
+                        pass
+                
+                for i in range(num_points):
+                    # Position along the line
+                    pos_ratio = i / (num_points - 1)
+                    pos_x = int(start_point[0] + pos_ratio * vec_x)
+                    pos_y = int(start_point[1] + pos_ratio * vec_y)
+                    
+                    # Create a dynamic wave pattern using multiple sine waves
+                    # Phase shifts based on time create animation effect
+                    wave1 = math.sin(wave_time_offset + i * 0.15) * base_amplitude
+                    wave2 = math.sin(wave_time_offset * 2.5 + i * 0.3) * base_amplitude * 0.3
+                    wave3 = math.sin(wave_time_offset * 1.7 + i * 0.05) * base_amplitude * 0.1
+                    
+                    # Final wave shape combines multiple frequencies
+                    wave_amplitude = (wave1 + wave2 + wave3) * audio_energy
+                    
+                    # Apply the amplitude along the perpendicular direction
+                    wave_x = int(pos_x + wave_amplitude * perp_x)
+                    wave_y = int(pos_y + wave_amplitude * perp_y)
+                    
+                    points.append((wave_x, wave_y))
+                
+                # Create a copy of the image for the glow effect
+                glow_layer = image.copy()
+                
+                # Draw the wave with a gradient color effect
+                for i in range(len(points) - 1):
+                    # Create a beautiful color gradient that cycles with time and position
+                    hue = int((wave_time_offset * 15 + i / len(points) * 180) % 180)  # Cycle between blue/purple/red
+                    saturation = 255
+                    value = 255
+                    
+                    # Convert HSV to BGR for OpenCV
+                    color = cv2.cvtColor(np.uint8([[[hue, saturation, value]]]), cv2.COLOR_HSV2BGR)[0][0]
+                    
+                    # Draw line segment on both the original and glow layer
+                    cv2.line(image, points[i], points[i+1], color.tolist(), 2)
+                    cv2.line(glow_layer, points[i], points[i+1], color.tolist(), 8)  # Thicker for glow effect
+                
+                # Apply blur to create a neon glow effect
+                glow_layer = cv2.GaussianBlur(glow_layer, (15, 15), 0)
+                
+                # Blend the glow with the original image
+                cv2.addWeighted(glow_layer, 0.6, image, 0.6, 0, image)
+                
+                # Add sparkle effects at wave peaks for extra visual appeal
+                for i in range(5, len(points) - 5, 10):
+                    if abs(points[i][1] - points[i+1][1]) > base_amplitude * 0.5:
+                        # Draw a small starburst/sparkle at high amplitude points
+                        sparkle_size = int(5 + volume * 5)
+                        cv2.circle(image, points[i], sparkle_size, (255, 255, 255), -1)
+                        cv2.circle(image, points[i], sparkle_size//2, (100, 200, 255), -1)
+            
+            # Continue with volume control logic
             # Calculate the length of the line between midpoints
             line_length = math.sqrt(
                 (midpoints[0][0] - midpoints[1][0])**2 + 
