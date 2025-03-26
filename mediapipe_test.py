@@ -151,16 +151,40 @@ while cap.isOpened():
             # Calculate the ratio
             ratio = line_length / (avg_hand_scale * w)  # Multiply by width to normalize
             
-            # Display the ratio on the screen
+            # Map ratio to volume (0.0 to 1.0)
+            # Anything below 1.0 is minimum volume (0.0)
+            # Anything above 5.0 is maximum volume (1.0)
+            # Between 1.0 and 5.0, map linearly
+            if ratio < 1.0:
+                volume = 0.0
+            elif ratio > 5.0:
+                volume = 1.0
+            else:
+                volume = (ratio - 1.0) / 4.0  # Map [1.0, 5.0] to [0.0, 1.0]
+            
+            # Apply the volume to the music player
+            pygame.mixer.music.set_volume(volume)
+            
+            # Display the ratio and volume on the screen
             cv2.putText(
                 image, 
-                f"Distance Ratio: {ratio:.2f}", 
+                f"Ratio: {ratio:.2f} | Volume: {int(volume * 100)}%", 
                 (30, 30), 
                 cv2.FONT_HERSHEY_SIMPLEX, 
                 1, 
                 (255, 255, 255), 
                 2
             )
+            
+            # Draw a volume bar
+            bar_x, bar_y = 30, 70
+            bar_width = 300
+            bar_height = 20
+            # Draw background bar (empty volume)
+            cv2.rectangle(image, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), (0, 0, 255), 2)
+            # Draw filled volume
+            filled_width = int(volume * bar_width)
+            cv2.rectangle(image, (bar_x, bar_y), (bar_x + filled_width, bar_y + bar_height), (0, 255, 0), -1)
     
     # Display the image
     cv2.imshow('MediaPipe Hands', image)
