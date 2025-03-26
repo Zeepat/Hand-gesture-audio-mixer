@@ -13,6 +13,10 @@ from pyo import *  # Import pyo for real-time audio processing
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Define a modern font setting
+FONT = cv2.FONT_HERSHEY_PLAIN  # More modern, cleaner font
+FONT_SCALE = 0.9  # Adjust scale as needed for the cleaner font
+
 # Initialize MediaPipe Hands and Drawing utilities.
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
@@ -114,6 +118,10 @@ max_speed = 2.0        # Maximum playback speed (2x instead of 3x)
 wave_time_offset = 0
 last_update_time = time.time()
 
+# More modern, cleaner font
+FONT = cv2.FONT_HERSHEY_PLAIN
+FONT_SCALE = 0.9
+
 while cap.isOpened():
     success, frame = cap.read()
     if not success:
@@ -188,7 +196,7 @@ while cap.isOpened():
             midpoint = (midpoint_x, midpoint_y)
             
             # Draw the midpoint
-            cv2.circle(image, midpoint, 10, (255, 165, 0), -1)  # Orange circle for midpoint
+            cv2.circle(image, midpoint, 0, (255, 165, 0), -1)  # Orange circle for midpoint
             
             # Calculate distance between landmarks 5 and 17 (index MCP and pinky MCP)
             distance_mcp = math.sqrt(
@@ -226,7 +234,7 @@ while cap.isOpened():
                 
                 # Right-align text for left hand (text ends at palm center)
                 text = f"Speedup: {speed_info}"
-                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.3, 1)[0]  # Changed from 0.6, 2
                 text_x = palm_center[0] - text_size[0]  # Right-aligned
                 text_y = palm_center[1]
                 
@@ -234,10 +242,10 @@ while cap.isOpened():
                     image, 
                     text, 
                     (text_x, text_y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.6, 
-                    (255, 0, 0), 
-                    2
+                    FONT,  # Use the new font
+                    FONT_SCALE,  # Use the new scale
+                    (255, 255, 255), 
+                    1     # Changed from 2
                 )
             
             elif handedness == "Right":  # Left hand in mirrored image
@@ -260,10 +268,10 @@ while cap.isOpened():
                     image, 
                     text, 
                     (text_x, text_y), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.6, 
-                    (0, 165, 255), 
-                    2
+                    FONT,  # Use the new font
+                    FONT_SCALE,  # Use the new scale
+                    (255, 255, 255), 
+                    1
                 )
         
         # Process right hand for pitch control (even if it's the only hand)
@@ -426,19 +434,14 @@ while cap.isOpened():
                 # Create a copy of the image for the glow effect
                 glow_layer = image.copy()
                 
-                # Draw the wave with a gradient color effect
+                # Draw the wave with a plain white color instead of gradient
                 for i in range(len(points) - 1):
-                    # Create a beautiful color gradient that cycles with time and position
-                    hue = int((wave_time_offset * 15 + i / len(points) * 180) % 180)  # Cycle between blue/purple/red
-                    saturation = 255
-                    value = 255
-                    
-                    # Convert HSV to BGR for OpenCV
-                    color = cv2.cvtColor(np.uint8([[[hue, saturation, value]]]), cv2.COLOR_HSV2BGR)[0][0]
+                    # Use white color for all line segments
+                    color = (255, 255, 255)  # White in BGR
                     
                     # Draw line segment on both the original and glow layer
-                    cv2.line(image, points[i], points[i+1], color.tolist(), 2)
-                    cv2.line(glow_layer, points[i], points[i+1], color.tolist(), 8)  # Thicker for glow effect
+                    cv2.line(image, points[i], points[i+1], color, 2)
+                    cv2.line(glow_layer, points[i], points[i+1], color, 8)  # Thicker for glow effect
                 
                 # Apply blur to create a neon glow effect
                 glow_layer = cv2.GaussianBlur(glow_layer, (15, 15), 0)
@@ -484,6 +487,24 @@ while cap.isOpened():
                 pitch_shifter.setMul(volume)
             else:
                 pygame.mixer.music.set_volume(volume)
+            
+            # Add volume indicator above the wave
+            # Show volume as a float with one decimal place (0.0-10.0)
+            vol_display = volume * 10  # Convert 0.0-1.0 to 0.0-10.0
+            
+            # Calculate position - midway between the two hand midpoints
+            mid_x = int((midpoints[0][0] + midpoints[1][0]) / 2)
+            mid_y = int((midpoints[0][1] + midpoints[1][1]) / 2) - 30  # 30 pixels above the midpoint
+            
+            # Create volume text with one decimal point (e.g., 2.3 or 5.7)
+            vol_text = f"{vol_display:.1f}"
+            
+            # Get text size for centering
+            text_size = cv2.getTextSize(vol_text, FONT, FONT_SCALE, 1)[0]
+            text_x = mid_x - (text_size[0] // 2)  # Center text horizontally
+            
+            # Display just the volume number without background
+            cv2.putText(image, vol_text, (text_x, mid_y), FONT, FONT_SCALE, (255, 255, 255), 1)
             
             # Remove volume bar and label
             
