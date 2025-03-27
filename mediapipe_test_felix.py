@@ -21,6 +21,106 @@ FONT_SCALE = 0.9  # Adjust scale as needed for the cleaner font
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
+# Initialize song control variables
+current_song_index = 0
+songs = []
+last_song_change_time = 0
+song_change_cooldown = 1.0  # Cooldown in seconds to prevent rapid song changes
+song_change_notification = None
+song_change_notification_time = 0
+song_change_display_duration = 2.0  # How long to show the song change notification
+
+# NEW: Debug variables for gesture detection
+gesture_debug_message = None
+gesture_debug_time = 0
+gesture_debug_duration = 2.0  # How long to show gesture detection messages
+gesture_visual_debug = False  # Set to True for additional visual debugging
+
+# NEW: Function to load and play a song at a specific index
+def load_and_play_song(index):
+    global current_sound, pitch_shifter, analyzer, fft_analyzer, current_song_index, song_change_notification, song_change_notification_time
+    
+    if not songs or index < 0 or index >= len(songs):
+        logging.warning(f"Invalid song index: {index}, available songs: {len(songs)}")
+        return False
+    
+    current_song_index = index
+    song_path = songs[current_song_index]
+    song_name = song_path.name
+    
+    logging.info(f"Loading song: {song_name} (index {current_song_index + 1}/{len(songs)})")
+    
+    # Set song change notification
+    song_change_notification = f"Now Playing: {song_name}"
+    song_change_notification_time = time.time()
+    
+    try:
+        if using_pyo:
+            # Stop current playback
+            if 'pitch_shifter' in globals() and pitch_shifter is not None:
+                pitch_shifter.stop()
+            if 'current_sound' in globals() and current_sound is not None:
+                current_sound.stop()
+                
+            # Load and play new song
+            current_sound = SfPlayer(str(song_path), loop=True)
+            pitch_shifter = Harmonizer(current_sound, transpo=0)
+            analyzer = Follower(pitch_shifter)
+            
+            # Create or update FFT analyzer
+            if 'fft_analyzer' not in globals() or fft_analyzer is None:
+                fft_size = 1024
+                fft_analyzer = Spectrum(pitch_shifter, size=fft_size)
+            else:
+                # Update FFT analyzer input
+                fft_analyzer.setInput(pitch_shifter)
+                
+            # Start playback
+            pitch_shifter.out()
+            return True
+        else:
+            # Pygame implementation
+            pygame.mixer.music.stop()
+            pygame.mixer.music.load(str(song_path))
+            pygame.mixer.music.play(-1)
+            return True
+    except Exception as e:
+        logging.error(f"Error changing song: {e}")
+        return False
+
+# NEW: Functions to change to next/previous songs
+def next_song():
+    global current_song_index, gesture_debug_message, gesture_debug_time
+    if not songs:
+        logging.warning("No songs available to play")
+        gesture_debug_message = "No songs available!"
+        gesture_debug_time = time.time()
+        return False
+        
+    next_index = (current_song_index + 1) % len(songs)
+    logging.info(f"Changing to next song (index {next_index + 1}/{len(songs)})")
+    
+    gesture_debug_message = "Skip song triggered"
+    gesture_debug_time = time.time()
+    
+    return load_and_play_song(next_index)
+
+def previous_song():
+    global current_song_index, gesture_debug_message, gesture_debug_time
+    if not songs:
+        logging.warning("No songs available to play")
+        gesture_debug_message = "No songs available!"
+        gesture_debug_time = time.time()
+        return False
+        
+    prev_index = (current_song_index - 1) % len(songs)
+    logging.info(f"Changing to previous song (index {prev_index + 1}/{len(songs)})")
+    
+    gesture_debug_message = "Previous song triggered"
+    gesture_debug_time = time.time()
+    
+    return load_and_play_song(prev_index)
+
 # Initialize pyo audio server for real-time audio processing
 try:
     logging.info("Starting pyo audio server...")
@@ -52,6 +152,10 @@ try:
                 
                 # Create an analyzer for waveform visualization
                 analyzer = Follower(pitch_shifter)
+                
+                # NEW: Create FFT analyzer for frequency spectrum analysis
+                fft_size = 1024
+                fft_analyzer = Spectrum(pitch_shifter, size=fft_size)
                 
                 # Connect to output and start playback
                 pitch_shifter.out()
@@ -122,6 +226,83 @@ last_update_time = time.time()
 FONT = cv2.FONT_HERSHEY_PLAIN
 FONT_SCALE = 0.9
 
+# NEW: Function to process FFT data for visualization
+def process_fft_data(fft_data, num_bins=32):
+    """
+    Process FFT data into a smaller number of bins for visualization
+    with exaggerated amplitude response for better visibility
+    
+    Args:
+        fft_data: The raw FFT data
+        num_bins: Number of frequency bins to visualize
+        
+    Returns:
+        List of amplitudes for each frequency bin
+    """
+    if fft_data is None or len(fft_data) == 0:
+        return [0] * num_bins
+    
+    # Get magnitude (absolute value) of FFT data
+    # We only need the first half of FFT data (real signal)
+    magnitudes = np.abs(fft_data[:len(fft_data)//2])
+    
+    # If we have FFT data but no sound playing, magnitudes will be all zeros
+    if np.sum(magnitudes) < 0.01:
+        return [0] * num_bins
+    
+    # Group frequencies into logarithmic bins (more natural for audio)
+    # This gives more detail to lower frequencies (which is perceptually important)
+    bin_size = len(magnitudes) // num_bins
+    bins = []
+    
+    for i in range(num_bins):
+        # Use logarithmic scaling for bin ranges
+        start = int((len(magnitudes) ** (i / num_bins)) - 1)
+        end = int((len(magnitudes) ** ((i + 1) / num_bins)) - 1)
+        
+        if start >= len(magnitudes):
+            start = len(magnitudes) - 1
+        if end >= len(magnitudes):
+            end = len(magnitudes) - 1
+            
+        # Ensure we have at least 1 sample per bin
+        if start == end:
+            bin_val = magnitudes[start]
+        else:
+            # Take average magnitude within the bin range
+            bin_val = np.mean(magnitudes[start:end])
+            
+        # ENHANCED: Apply more aggressive logarithmic scaling with boosting
+        # Increase factor from 10 to 20 for more dramatic effect
+        bin_val = np.log10(bin_val + 1) * 20
+        
+        # ENHANCED: Apply frequency-dependent boost
+        # Boost low frequencies (bass) more than high frequencies
+        if i < num_bins // 3:  # Lower third (bass)
+            freq_boost = 1.8
+        elif i < 2 * num_bins // 3:  # Middle third (mids)
+            freq_boost = 1.4
+        else:  # Upper third (highs)
+            freq_boost = 1.2
+            
+        bin_val *= freq_boost
+        
+        bins.append(bin_val)
+    
+    # Normalize to 0-1 range with a minimum threshold for visibility
+    max_val = max(bins) if max(bins) > 0 else 1
+    min_threshold = 0.15  # Ensure quiet parts are still visible
+    normalized_bins = [max(min_threshold, min(val / max_val, 1.0)) for val in bins]
+    
+    return normalized_bins
+
+# Initialize variables for enhanced spectrum visualization
+fft_data = None
+spectrum_bins = []
+spectrum_smoothing = 0.6  # Reduced from 0.7 for more responsive visualization
+beat_detection = 0.0  # For detecting beats in the music
+last_beat_time = 0  # Time of last detected beat
+
 while cap.isOpened():
     success, frame = cap.read()
     if not success:
@@ -156,6 +337,7 @@ while cap.isOpened():
     hand_scales = []  # Store distances between index_mcp and pinky_mcp for each hand
     pinch_ratios = []  # Store thumb-index pinch ratios for each hand
     hand_labels = []   # Store hand labels (Left/Right)
+    hand_centers = []  # NEW: Store hand palm centers for vertical position detection
     
     if results.multi_hand_landmarks:
         for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
@@ -182,6 +364,9 @@ while cap.isOpened():
             palm_center_x = int((wrist.x + middle_mcp.x) * w / 2)
             palm_center_y = int((wrist.y + middle_mcp.y) * h / 2)
             palm_center = (palm_center_x, palm_center_y)
+            
+            # NEW: Store hand palm center for vertical position detection
+            hand_centers.append((handedness, palm_center))
             
             # Draw only thumb tip and index tip landmarks (removing knuckles)
             cv2.circle(image, thumb_tip_px, 2, (255, 255, 255), -1)  # Red for thumb tip
@@ -376,6 +561,71 @@ while cap.isOpened():
             
             # Remove on-screen text and bars for speed control
         
+        # FIXED: Check for vertical hand position gestures for song navigation
+        current_time = time.time()
+        if len(hand_centers) == 2 and current_time - last_song_change_time > song_change_cooldown:
+            left_hand = None
+            right_hand = None
+            left_hand_idx = None
+            right_hand_idx = None
+            
+            # Identify left and right hands and track their indices
+            for idx, (hand_label, center) in enumerate(hand_centers):
+                if hand_label == "Left":  # This is the right hand in mirrored image
+                    left_hand = center
+                    left_hand_idx = idx
+                elif hand_label == "Right":  # This is the left hand in mirrored image
+                    right_hand = center
+                    right_hand_idx = idx
+            
+            if left_hand and right_hand:
+                # Calculate vertical distance between hands (negative if left is above right)
+                vertical_distance = left_hand[1] - right_hand[1]
+                
+                # Define a threshold for vertical positioning (in pixels)
+                # Reduced from 150 to make detection more sensitive
+                vertical_threshold = 100
+                
+                # Display debugging info for gesture detection
+                if gesture_visual_debug:
+                    # Draw a line connecting the hand centers
+                    cv2.line(image, left_hand, right_hand, (0, 255, 255), 2)
+                    
+                    # Display the vertical distance
+                    mid_x = (left_hand[0] + right_hand[0]) // 2
+                    mid_y = (left_hand[1] + right_hand[1]) // 2
+                    
+                    dist_text = f"Vert dist: {vertical_distance:.1f} px (threshold: {vertical_threshold})"
+                    cv2.putText(image, dist_text, (mid_x - 100, mid_y - 20), 
+                                FONT, FONT_SCALE, (0, 255, 255), 1)
+                
+                # Left hand over right hand = next song
+                # Using negative threshold since y-coordinates increase downward
+                if vertical_distance < -vertical_threshold:
+                    # Visual confirmation in logs
+                    logging.info(f"Gesture detected: Left hand over right hand - vertical diff: {vertical_distance:.1f}px")
+                    
+                    # Debug message
+                    gesture_debug_message = "Left hand over right - Skip song"
+                    gesture_debug_time = current_time
+                    
+                    # Change song
+                    if next_song():
+                        last_song_change_time = current_time
+                
+                # Right hand over left hand = previous song
+                elif vertical_distance > vertical_threshold:
+                    # Visual confirmation in logs
+                    logging.info(f"Gesture detected: Right hand over left hand - vertical diff: {vertical_distance:.1f}px")
+                    
+                    # Debug message
+                    gesture_debug_message = "Right hand over left - Previous song"
+                    gesture_debug_time = current_time
+                    
+                    # Change song
+                    if previous_song():
+                        last_song_change_time = current_time
+        
         # If we detected two hands, control volume with the distance between hands
         if len(midpoints) == 2:
             # Don't draw the simple red line - replace with waveform visualization
@@ -510,6 +760,131 @@ while cap.isOpened():
             
             # Remove pinch ratio display
     
+    # NEW: Display song change notification if active
+    if song_change_notification and time.time() - song_change_notification_time < song_change_display_duration:
+        # Create semi-transparent overlay for the notification
+        overlay = image.copy()
+        
+        # Calculate text position (centered at the top of the screen)
+        text_size = cv2.getTextSize(song_change_notification, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
+        text_x = (image.shape[1] - text_size[0]) // 2
+        text_y = 50  # From top
+        
+        # Draw background rectangle
+        cv2.rectangle(overlay, 
+                     (text_x - 20, text_y - 40), 
+                     (text_x + text_size[0] + 20, text_y + 10),
+                     (0, 0, 0), -1)
+        
+        # Add the overlay with transparency
+        alpha = 0.7
+        cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
+        
+        # Draw the notification text
+        cv2.putText(image, song_change_notification, (text_x, text_y), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+        
+        # NEW: Add visual instructions for song navigation at the bottom of the screen
+        if time.time() - song_change_notification_time < song_change_display_duration * 2:
+            instructions = "Song Navigation: Left hand over Right = Next, Right hand over Left = Previous"
+            inst_size = cv2.getTextSize(instructions, FONT, FONT_SCALE, 1)[0]
+            inst_x = (image.shape[1] - inst_size[0]) // 2
+            inst_y = image.shape[0] - 30
+            
+            # Draw semi-transparent background
+            cv2.rectangle(overlay, 
+                         (inst_x - 10, inst_y - 20), 
+                         (inst_x + inst_size[0] + 10, inst_y + 10),
+                         (0, 0, 0), -1)
+            
+            # Add the overlay
+            cv2.addWeighted(overlay, 0.5, image, 0.5, 0, image)
+            
+            # Draw text
+            cv2.putText(image, instructions, (inst_x, inst_y), 
+                        FONT, FONT_SCALE, (255, 255, 255), 1)
+    
+    # NEW: Display gesture debug information
+    if gesture_debug_message and time.time() - gesture_debug_time < gesture_debug_duration:
+        # Create semi-transparent overlay for the debug message
+        overlay = image.copy()
+        
+        # Position at the top center, below any potential song notification
+        text_size = cv2.getTextSize(gesture_debug_message, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+        text_x = (image.shape[1] - text_size[0]) // 2
+        text_y = 100  # Below song notification
+        
+        # Draw a highlighted background for visibility
+        cv2.rectangle(overlay, 
+                     (text_x - 10, text_y - 30), 
+                     (text_x + text_size[0] + 10, text_y + 10),
+                     (0, 100, 0), -1)  # Dark green background
+        
+        # Add the overlay with transparency
+        alpha = 0.7
+        cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
+        
+        # Draw the debug message with a white outline for better visibility
+        # Draw outline by creating multiple offset text elements
+        for dx, dy in [(-1,-1), (-1,1), (1,-1), (1,1)]:
+            cv2.putText(image, gesture_debug_message, (text_x + dx, text_y + dy), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+                        
+        # Draw the main text
+        cv2.putText(image, gesture_debug_message, (text_x, text_y), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    
+    # NEW: Display song count and current song index when no notifications are active
+    if not song_change_notification or time.time() - song_change_notification_time >= song_change_display_duration:
+        if songs:
+            song_info = f"Song {current_song_index + 1}/{len(songs)}: {songs[current_song_index].name}"
+            
+            # Make text smaller to fit on screen
+            text_size = cv2.getTextSize(song_info, FONT, FONT_SCALE, 1)[0]
+            max_width = image.shape[1] - 20
+            
+            # If text is too long, truncate it
+            if text_size[0] > max_width:
+                # Calculate how many characters we can fit
+                chars_per_pixel = len(song_info) / text_size[0]
+                max_chars = int(max_width * chars_per_pixel) - 10  # Leave some margin
+                song_info = song_info[:max_chars] + "..."
+            
+            text_x = 10  # Left-aligned
+            text_y = 25  # From top
+            
+            # Add semi-transparent background
+            overlay = image.copy()
+            text_size = cv2.getTextSize(song_info, FONT, FONT_SCALE, 1)[0]
+            cv2.rectangle(overlay, 
+                         (text_x - 5, text_y - 20), 
+                         (text_x + text_size[0] + 5, text_y + 5),
+                         (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.5, image, 0.5, 0, image)
+            
+            # Draw song info
+            cv2.putText(image, song_info, (text_x, text_y), 
+                        FONT, FONT_SCALE, (255, 255, 255), 1)
+    
+    # NEW: Always show gesture control hint in bottom-right corner
+    if songs:  # Only show if we have songs to control
+        hint_text = "Vertical hand gestures control song navigation"
+        text_size = cv2.getTextSize(hint_text, FONT, FONT_SCALE * 0.8, 1)[0]
+        text_x = image.shape[1] - text_size[0] - 10  # Right-aligned
+        text_y = image.shape[0] - 10  # Bottom
+        
+        # Add semi-transparent background
+        overlay = image.copy()
+        cv2.rectangle(overlay, 
+                     (text_x - 5, text_y - 15), 
+                     (text_x + text_size[0] + 5, text_y + 5),
+                     (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.5, image, 0.5, 0, image)
+        
+        # Draw hint
+        cv2.putText(image, hint_text, (text_x, text_y), 
+                    FONT, FONT_SCALE * 0.8, (200, 200, 255), 1)
+    
     # Display the image
     cv2.imshow('MediaPipe Hands', image)
     
@@ -529,6 +904,8 @@ try:
             pitch_shifter.stop()
         if current_sound is not None:
             current_sound.stop()
+        if 'fft_analyzer' in locals():
+            fft_analyzer.stop()
         if 's' in locals():
             s.stop()
     else:
